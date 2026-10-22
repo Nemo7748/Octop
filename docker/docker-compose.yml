@@ -2,6 +2,7 @@
 # Octop — Docker Compose
 #
 # 用法（在仓库根目录执行）:
+#   make docker-up                                  # 推荐：构建并启动
 #   docker compose -f docker/docker-compose.yml up -d
 #   OCTOP_PORT=9090 docker compose -f docker/docker-compose.yml up -d
 #   OCTOP_DEFAULT_PASSWORD=mypass docker compose -f docker/docker-compose.yml up -d
@@ -10,6 +11,9 @@
 #   OCTOP_PORT=9090
 #   OCTOP_DEFAULT_PASSWORD=mypass
 #   OCTOP_ADMIN_USERNAME=admin
+#
+# 数据默认存放在命名卷 octop-data 中（docker volume ls 可查）；
+# 需要改用宿主机目录时，见下方 volumes 处的注释。
 # =============================================================================
 
 services:
@@ -23,7 +27,11 @@ services:
     ports:
       - "${OCTOP_PORT:-8088}:${OCTOP_PORT:-8088}"
     volumes:
-      - ${OCTOP_DATA:-~/.octop}:/data/.octop
+      # 默认用命名卷。宿主机路径写法（如 ~/.octop）在 Windows 的 Compose 里不会展开，
+      # 会悄悄生成一个字面名为 "~" 的目录，表现为"数据好像没保存"。
+      # 需要放到宿主机目录时，把下面一行换成绝对路径，例如：
+      #   - /srv/octop-data:/data/.octop
+      - octop-data:/data/.octop
     environment:
       - HOME=/data
       - OCTOP_BIND_HOST=0.0.0.0
@@ -38,3 +46,6 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-}
+
+volumes:
+  octop-data:
