@@ -58,6 +58,12 @@ coverage.xml
 
 # uv
 .uv/
+.uv-cache/
+
+# Local tooling and scratch space (never commit: portable binaries, downloaded wheels)
+.tools/
+.tmp/
+.review/
 
 # Node / frontend
 node_modules/
