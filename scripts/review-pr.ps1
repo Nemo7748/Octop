@@ -148,6 +148,43 @@ Write-Output ("touches dashboard: $touchesDashboard")
 Write-Output ("touches docs     : $touchesDocs")
 Write-Output ("touches docker   : $touchesDocker")
 
+# ---------------------------------------------------------------- CI status
+# The repository ships .github/workflows/ci.yml, but a fork does not run workflows until an
+# administrator enables them. Zero checks therefore means "not verified", never "verified green".
+if (Test-Tool 'gh') {
+    $raw = & gh pr view $Pr --repo $Repo --json statusCheckRollup,reviewDecision,mergeStateStatus 2>$null | Out-String
+    if ($LASTEXITCODE -eq 0 -and $raw.Trim()) {
+        $meta = $raw | ConvertFrom-Json
+        $checks = @($meta.statusCheckRollup)
+        Write-Output ''
+        Write-Output ("--- CI status: {0} check(s), review={1} ---" -f $checks.Count, $meta.reviewDecision)
+        if ($checks.Count -eq 0) {
+            Write-Output '    no checks reported: workflows are not enabled on this repository.'
+            Add-Result 'ci' 'WARN' 'no checks reported (fork workflows not enabled)'
+        }
+        else {
+            foreach ($c in $checks) {
+                if ($c.conclusion) { $state = $c.conclusion } else { $state = $c.status }
+                Write-Output ("    {0} {1}" -f $state, $c.name)
+            }
+            $failed = @($checks | Where-Object { $_.conclusion -and $_.conclusion -notin @('SUCCESS', 'NEUTRAL', 'SKIPPED') })
+            $pending = @($checks | Where-Object { $_.status -ne 'COMPLETED' })
+            if ($failed.Count -gt 0) {
+                Add-Result 'ci' 'FAIL' ("$($failed.Count) failing check(s)")
+            }
+            elseif ($pending.Count -gt 0) {
+                Add-Result 'ci' 'FAIL' ("$($pending.Count) check(s) still running")
+            }
+            else {
+                Add-Result 'ci' 'PASS' ("$($checks.Count) check(s) green")
+            }
+        }
+    }
+}
+else {
+    Add-Result 'ci' 'WARN' 'gh is not available; CI status not inspected'
+}
+
 if ($SkipTests) {
     Write-Output ''
     Write-Output 'SkipTests requested: diff only. No build or test step was executed.'
@@ -233,6 +270,14 @@ $skipped = @($script:results | Where-Object { $_.Status -eq 'SKIP' }).Count
 if ($skipped -gt 0) {
     Write-Output ("VERDICT: INCOMPLETE - $skipped check(s) skipped; do not merge until they run.")
     exit 1
+}
+
+$warnings = @($script:results | Where-Object { $_.Status -eq 'WARN' })
+if ($warnings.Count -gt 0) {
+    foreach ($w in $warnings) { Write-Output ("WARNING: {0} - {1}" -f $w.Check, $w.Detail) }
+    Write-Output 'VERDICT: APPROVE WITH WARNINGS - read the warnings before merging; unverified items are listed above.'
+    Write-Output "Worktree: $worktree"
+    exit 0
 }
 
 Write-Output 'VERDICT: APPROVE - every executed check passed.'
