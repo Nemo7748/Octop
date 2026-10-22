@@ -70,6 +70,13 @@ help:
 	@echo "  typecheck-all    typecheck + typecheck-frontend"
 	@echo "  check-all        lint-all + typecheck-all + test"
 	@echo ""
+	@echo "Docker targets (one-click self-hosting):"
+	@echo "  docker-up        Build if needed and start at http://localhost:8088"
+	@echo "  docker-down      Stop and remove the container (data stays in the volume)"
+	@echo "  docker-build     Build the image only"
+	@echo "  docker-logs      Follow container logs"
+	@echo "  docker-shell     Open a bash shell inside the container"
+	@echo ""
 	@echo "Utility targets:"
 	@echo "  install          Install Python dev dependencies (alias: install-dev)"
 	@echo "  install-dev      uv sync / pip install -e \".[dev]\""
@@ -227,6 +234,29 @@ typecheck-all: typecheck typecheck-frontend
 
 .PHONY: check-all
 check-all: lint-all typecheck-all test
+
+# ─── Docker ──────────────────────────────────────────────────────────────────
+
+COMPOSE := docker compose -f docker/docker-compose.yml
+
+.PHONY: docker-up docker-down docker-build docker-logs docker-shell
+docker-up:
+	@echo "[docker] Building image if needed, then starting on port $$(OCTOP_PORT:-8088)..."
+	$(COMPOSE) up -d --build
+	@echo "[docker] Up. First start creates the admin account (see docker/README_CN.md)."
+	@echo "[docker] Health: curl http://localhost:$${OCTOP_PORT:-8088}/api/health"
+
+docker-down:
+	$(COMPOSE) down
+
+docker-build:
+	$(COMPOSE) build
+
+docker-logs:
+	$(COMPOSE) logs -f --tail=100
+
+docker-shell:
+	$(COMPOSE) exec octop bash
 
 # ─── Utilities ───────────────────────────────────────────────────────────────
 

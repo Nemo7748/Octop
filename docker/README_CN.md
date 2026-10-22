@@ -16,15 +16,25 @@
 
 ### 快速开始
 
-**方式一：Compose（推荐）**
+**方式一：一键启动（推荐）**
 
 在仓库根目录执行：
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d --build
+make docker-up
 ```
 
+等价于 `docker compose -f docker/docker-compose.yml up -d --build`，但会先构建镜像再启动。停止用 `make docker-down`，看日志用 `make docker-logs`。
+
 访问 `http://localhost:8088`，默认账号 `admin` / `octop`（仅首次初始化生效）。
+
+> **安全提醒**：默认密码 `octop` 只能用于本机试跑。任何共享环境、演示环境、内网部署都必须先改：
+>
+> ```bash
+> OCTOP_DEFAULT_PASSWORD='换成强密码' make docker-up
+> ```
+>
+> 已经初始化过的实例改密码要走 `docker exec -it octop octop user passwd --username admin`，改环境变量不会覆盖已有账号。
 
 **方式二：构建脚本**
 
@@ -65,9 +75,18 @@ Compose 可在 `docker/.env` 中配置上述变量。
 
 ### 数据持久化
 
-- Compose 默认将宿主机 `~/.octop` 挂载到容器 `/data/.octop`
-- `docker run` 示例使用命名卷 `octop-data`
+- Compose 默认使用**命名卷** `octop-data`，挂在容器 `/data/.octop`
+- 换成宿主机目录时，把 `docker-compose.yml` 里 `- octop-data:/data/.octop` 改成绝对路径：
+  `- /srv/octop-data:/data/.octop`（Windows 上写 `D:/octop-data`）
+- 不要用 `~/.octop` 这种写法：Windows 的 Compose 不展开 `~`，会生成一个名字就叫 `~` 的目录
 - 首次启动会自动执行 `octop init`，凭据写入容器内 `/data/.octop/credential.txt`
+
+备份与恢复（命名卷）：
+
+```bash
+docker run --rm -v octop-data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/octop-data.tar.gz -C /data .
+```
 
 ### 健康检查
 
@@ -77,11 +96,36 @@ Compose 可在 `docker/.env` 中配置上述变量。
 curl http://localhost:8088/api/health
 ```
 
+### 离线部署（内网 / 无外网环境）
+
+公安内网无法访问 Docker Hub 与 npm/PyPI，镜像必须在有外网的机器上构建后导入。
+
+**在有外网的机器上：**
+
+```bash
+git clone https://github.com/Nemo7748/Octop.git
+cd Octop
+make docker-up            # 或 docker compose -f docker/docker-compose.yml build
+docker save octop:latest | gzip > octop-image.tar.gz
+sha256sum octop-image.tar.gz > octop-image.tar.gz.sha256
+```
+
+**把 `octop-image.tar.gz` 和 `.sha256` 拷到内网机器后：**
+
+```bash
+sha256sum -c octop-image.tar.gz.sha256     # 先校验，再导入
+docker load < octop-image.tar.gz
+docker compose -f docker/docker-compose.yml up -d --no-build
+```
+
+注意：`--no-build` 很关键，否则 Compose 会尝试重新构建并因拉不到基础镜像而失败。
+
 ### 常用运维命令
 
 ```bash
-docker logs -f octop
-docker exec -it octop octop --version
-docker compose -f docker/docker-compose.yml down
-docker compose -f docker/docker-compose.yml up -d --build
+make docker-logs                              # 跟踪日志
+make docker-down                              # 停止并删除容器（数据卷保留）
+make docker-shell                             # 进容器排查
+docker exec -it octop octop --version         # 版本
+docker compose -f docker/docker-compose.yml ps
 ```
